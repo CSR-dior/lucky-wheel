@@ -886,16 +886,17 @@ body {
   function getSelectedIndex(options, angle) {
     const n = options.length;
     if (n === 0) return -1;
-    // 指针在顶部（-π/2 即 12 点钟方向）
     // 归一化角度到 [0, 2π)
     let normAngle = angle % (2 * Math.PI);
     if (normAngle < 0) normAngle += 2 * Math.PI;
-    // 指针在顶部，对应角度 0（归一化后），扇区从 -π/2 开始
-    // 所以指针指向的角度 = normAngle
+    // 指针在顶部（-π/2）。扇区 i 的角度范围：
+    //   [currentAngle + i*sliceAngle - π/2, currentAngle + (i+1)*sliceAngle - π/2)
+    // 指针在 -π/2 时指向扇区 i 满足：
+    //   currentAngle + i*sliceAngle ≤ 0 < currentAngle + (i+1)*sliceAngle (mod 2π)
+    // 解得 i = floor((-normAngle mod 2π) / sliceAngle)
+    const phi = normAngle === 0 ? 0 : (2 * Math.PI - normAngle);
     const sliceAngle = (2 * Math.PI) / n;
-    const idx = Math.floor(normAngle / sliceAngle);
-    // 取反（因为视觉上转盘顺时针转 = 角度逆时针增加）
-    return (n - idx) % n;
+    return Math.floor(phi / sliceAngle) % n;
   }
 
   function spin(options, onComplete) {
@@ -909,9 +910,11 @@ body {
     const randomSlice = Math.floor(Math.random() * n);
     // 计算需要转到这个扇区所需的总角度
     const sliceAngle = (2 * Math.PI) / n;
-    // 修正：getSelectedIndex 使用 (n - idx) % n 映射，角度需对应反转
-    const targetIdx = (n - randomSlice) % n;
-    const targetSliceAngle = targetIdx * sliceAngle + sliceAngle / 2;
+    // getSelectedIndex 已修正为 phi = (2π - normAngle)
+    // 要选中 randomSlice：phi = randomSlice*sliceAngle + sliceAngle/2
+    // → normAngle = 2π - phi = (n - randomSlice)*sliceAngle - sliceAngle/2
+    let targetSliceAngle = (n - randomSlice) * sliceAngle - sliceAngle / 2;
+    if (targetSliceAngle < 0) targetSliceAngle += 2 * Math.PI;
 
     // 让指针（顶部）对准这个扇区
     // 加上足够的圈数保证视觉效果
