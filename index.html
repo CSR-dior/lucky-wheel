@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>大转盘 - 今天吃什么/喝什么？</title>
 <style>
 /* ===== CSS 变量 ===== */
@@ -77,6 +77,16 @@ body {
   margin-bottom: var(--space-md);
 }
 
+/* gap 降级：不支持 flex gap 的浏览器（Safari 13-）用 margin */
+.category-tabs > * + * { margin-left: var(--space-xs); }
+.bottom-nav > * + * { margin-left: var(--space-xs); }
+.option-list > * { margin: 0 var(--space-xs) var(--space-xs) 0; }
+@supports (gap: 1px) { /* 支持 gap 则清除降级 margin */
+  .category-tabs > * + *,
+  .bottom-nav > * + *,
+  .option-list > * { margin: 0; }
+}
+
 /* 分类标签 */
 .category-tabs {
   display: flex;
@@ -123,8 +133,18 @@ body {
 .wheel-wrapper {
   position: relative;
   width: 100%;
-  aspect-ratio: 1 / 1;
   max-width: 380px;
+  /* 降级方案：Safari 14 不支持 aspect-ratio */
+  height: 0;
+  padding-bottom: 100%; /* 1:1 */
+}
+/* 支持 aspect-ratio 的浏览器覆盖降级 */
+@supports (aspect-ratio: 1 / 1) {
+  .wheel-wrapper {
+    height: auto;
+    padding-bottom: 0;
+    aspect-ratio: 1 / 1;
+  }
 }
 
 /* 转盘指针 */
@@ -139,6 +159,7 @@ body {
   border-left: 14px solid transparent;
   border-right: 14px solid transparent;
   border-top: 28px solid #c0392b;
+  -webkit-filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
 }
 
@@ -678,11 +699,21 @@ body {
 (function () {
   'use strict';
 
-  /* ---- polyfill: structuredClone (iOS 14 / 旧 Safari 兼容) ---- */
+  /* ---- polyfills（旧 Safari 兼容） ---- */
   if (typeof structuredClone !== 'function') {
     window.structuredClone = function (obj) {
       return JSON.parse(JSON.stringify(obj));
     };
+  }
+  // NodeList.forEach (Safari < 10)
+  if (window.NodeList && !NodeList.prototype.forEach) {
+    NodeList.prototype.forEach = Array.prototype.forEach;
+  }
+  // performance.now (Safari < 10)
+  if (typeof performance === 'undefined') {
+    window.performance = { now: function () { return Date.now(); } };
+  } else if (typeof performance.now !== 'function') {
+    performance.now = function () { return Date.now(); };
   }
 
   /* ================================================================
@@ -714,11 +745,11 @@ body {
       const data = JSON.parse(raw);
       if (data.version !== DEFAULT_DATA.version) return structuredClone(DEFAULT_DATA);
       // 确保分类结构完整
-      for (const key of Object.keys(DEFAULT_DATA.categories)) {
+      Object.keys(DEFAULT_DATA.categories).forEach(function (key) {
         if (!data.categories[key]) {
           data.categories[key] = structuredClone(DEFAULT_DATA.categories[key]);
         }
-      }
+      });
       if (!Array.isArray(data.history)) data.history = [];
       return data;
     } catch (_) {
@@ -1092,27 +1123,41 @@ body {
   }
 
   function showResult(optionName, category) {
-    const overlay = document.createElement('div');
+    var overlay = document.createElement('div');
     overlay.className = 'result-overlay';
-    overlay.innerHTML = `
-      <div class="result-modal">
-        <div class="result-emoji">🎉</div>
-        <div class="result-label">${category === 'food' ? '🍜 今天吃' : '🧋 今天喝'}</div>
-        <div class="result-name">${optionName}</div>
-        <button class="result-close">好的！</button>
-      </div>
-    `;
+    var modal = document.createElement('div');
+    modal.className = 'result-modal';
+    var emoji = document.createElement('div');
+    emoji.className = 'result-emoji';
+    emoji.textContent = '🎉';
+    var label = document.createElement('div');
+    label.className = 'result-label';
+    label.textContent = category === 'food' ? '🍜 今天吃' : '🧋 今天喝';
+    var nameEl = document.createElement('div');
+    nameEl.className = 'result-name';
+    nameEl.textContent = optionName; // 用 textContent 防 XSS
+    var btn = document.createElement('button');
+    btn.className = 'result-close';
+    btn.textContent = '好的！';
+    modal.appendChild(emoji);
+    modal.appendChild(label);
+    modal.appendChild(nameEl);
+    modal.appendChild(btn);
+    overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
-    const close = () => overlay.remove();
-    overlay.querySelector('.result-close').addEventListener('click', close);
-    overlay.addEventListener('click', (e) => {
+    var close = function () { overlay.remove(); };
+    btn.addEventListener('click', close);
+    overlay.addEventListener('click', function (e) {
       if (e.target === overlay) close();
     });
 
-    // 自动关闭（1.5 秒后）
-    const autoClose = setTimeout(close, 2000);
-    overlay.addEventListener('click', () => clearTimeout(autoClose), { once: true });
+    // 自动关闭（2 秒后）；已手动点击则取消自动关闭
+    var autoCloseTimer = setTimeout(close, 2000);
+    var cleared = false;
+    overlay.addEventListener('click', function () {
+      if (!cleared) { cleared = true; clearTimeout(autoCloseTimer); }
+    });
   }
 
   function refreshWheel() {
@@ -1134,7 +1179,7 @@ body {
       showToast('最多 30 个选项哦 😊');
       return;
     }
-    if (options.includes(text)) {
+    if (options.indexOf(text) !== -1) {
       showToast('这个选项已经存在啦 😊');
       return;
     }
@@ -1364,7 +1409,7 @@ body {
     btn.addEventListener('click', () => {
       navBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      Object.values(panels).forEach(p => p.classList.remove('active'));
+      Object.keys(panels).forEach(function(k) { panels[k].classList.remove('active'); });
       panels[btn.dataset.panel].classList.add('active');
     });
   });
