@@ -381,7 +381,7 @@ body {
 /* 结果弹窗 */
 .result-overlay {
   position: fixed;
-  inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
   background: rgba(0,0,0,0.4);
   display: flex;
   align-items: center;
@@ -484,7 +484,7 @@ body {
 /* 照片查看弹窗 */
 .photo-view-overlay {
   position: fixed;
-  inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
   background: rgba(0,0,0,0.85);
   display: flex;
   align-items: center;
@@ -526,7 +526,7 @@ body {
 /* 确认弹窗 */
 .confirm-overlay {
   position: fixed;
-  inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
   background: rgba(0,0,0,0.4);
   display: flex;
   align-items: center;
@@ -581,7 +581,7 @@ body {
 /* 转盘空状态（Canvas 上文字） */
 .wheel-empty-text {
   position: absolute;
-  inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -678,6 +678,13 @@ body {
 (function () {
   'use strict';
 
+  /* ---- polyfill: structuredClone (iOS 14 / 旧 Safari 兼容) ---- */
+  if (typeof structuredClone !== 'function') {
+    window.structuredClone = function (obj) {
+      return JSON.parse(JSON.stringify(obj));
+    };
+  }
+
   /* ================================================================
      StorageManager — localStorage 数据读写
      ================================================================ */
@@ -747,7 +754,7 @@ body {
   function resizeCanvas() {
     const rect = canvas.parentElement.getBoundingClientRect();
     const size = rect.width;
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2); // 上限 2x，避免高清屏性能问题
     canvas.width = size * dpr;
     canvas.height = size * dpr;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -902,7 +909,9 @@ body {
     const randomSlice = Math.floor(Math.random() * n);
     // 计算需要转到这个扇区所需的总角度
     const sliceAngle = (2 * Math.PI) / n;
-    const targetSliceAngle = randomSlice * sliceAngle + sliceAngle / 2;
+    // 修正：getSelectedIndex 使用 (n - idx) % n 映射，角度需对应反转
+    const targetIdx = (n - randomSlice) % n;
+    const targetSliceAngle = targetIdx * sliceAngle + sliceAngle / 2;
 
     // 让指针（顶部）对准这个扇区
     // 加上足够的圈数保证视觉效果
